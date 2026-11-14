@@ -31,6 +31,13 @@ pipeline with fabricated answers (written to `results-mock/`, never to `results/
 
 Scoring is intersection over union (IoU) against the true box; 0.5 or more is a hit.
 
+## Findings
+
+- Write-up: https://claude.ai/artifact/ShEyAaxGHCWDapvM6VURyM
+- Slides: https://claude.ai/artifact/TKN4yTnGaY976MNt3AQcFA
+- Podcast: `podcast/typesafe-box-podcast.mp3` (7 minutes; script in `podcast/script.txt`,
+  rebuilt with `uv run podcast/build.py` on macOS with ffmpeg)
+
 ## Layout
 
 - `boxlab/scenes.py`: scene and invoice generators with ground truth

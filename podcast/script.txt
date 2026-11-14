@@ -1,0 +1,46 @@
+A: Welcome. Today, one small feature, and one afternoon spent poking at it. TypeSafe shipped a new question type called Box, with their Jev 1.14 model, in October. We ran a small suite of experiments against it, and that is what this episode is about.
+B: Let's set it up for anyone who hasn't used TypeSafe. Their models don't write text. You send some state, you ask typed questions, and you get typed answers back. A Choice picks one option. A Noul is a yes or no, with a probability. A Score rates something on a scale.
+A: And Box is the fourth one. You hand it an image, you say, the coffee mug in the photo, and it gives you back four numbers. Top, bottom, left, right. Each one is a fraction of the image, from zero to one. Plus a confidence.
+B: Which is a neat idea, because the answer means the same thing whatever size the image is. But the docs are upfront that this is a preview. Their phrase is, dreamer ready. Prototype with it. Don't ship on it yet.
+A: So we built a test suite. Eight experiments, one hundred and fifty nine requests. And the trick that made it easy to score is that we drew all the images ourselves. Coloured shapes, patterned tiles, a fake invoice.
+B: Why does that matter?
+A: Because if you draw the image, you know exactly where everything is. So every answer can be scored automatically. We measured the overlap between the true box and the box that came back. Half overlap or better counts as a hit.
+B: The catch being that flat shapes on a plain background are easier than real photographs. So everything we say today is probably a best case.
+A: Right. So, the easy case first. Five different shapes, one question each. Box hit eighty seven percent of the time. The typical overlap was 0.83.
+B: Good, but not tight.
+A: Good, not tight. Only ten of sixty boxes were what you would call really tight. Edges were off by about two percent of the image, on average.
+B: And here is the finding I think matters most, and it is not in the documentation. Every edge that came back, in every answer, was a multiple of one hundredth. One thousand, eight hundred and twenty eight edges. No exceptions.
+A: So Box answers on a one percent grid.
+B: Exactly. In a thousand pixel image, that is ten pixel steps. Which means, if your target is ten or twenty pixels wide, there is no way to draw a tight box around it. The grid is too coarse.
+A: And we saw that directly. We shrank a red circle from two hundred and fifty six pixels, down to ten. At twenty four pixels and below, zero hits. At ninety six pixels and above, eleven out of twelve.
+B: The docs suggest a workaround for that. Cut the image into tiles, ask a Choice question, which tile has the target, and then ask Box on that tile.
+A: And it works, partly. The tile choice was right fifteen times out of fifteen. For the mid sized targets, hits went from three of nine, to eight of nine. The tiniest ones stayed out of reach.
+B: Now, the one that worried me going in. Box has no way to say, not found. It always returns a box.
+A: So we asked for things that were not there. Twenty scenes. And yes, you get a box every time. If nothing in the image looks like the target, confidence is very low. Around 0.05. Fine.
+B: But?
+A: But if there is a look alike, it gets interesting. We asked for an orange triangle, in a scene that had a red triangle. It boxed the red triangle, with a confidence of 0.75.
+B: That is higher than a lot of the correct answers.
+A: It is. So confidence alone will not save you. What does save you is asking a Noul in the same request. Is there an orange triangle in this image? That was right forty times out of forty.
+B: So the rule is simple. Never ask a Box without a Noul next to it.
+A: What about when there are two of the same thing?
+B: Two identical red circles, and you just say, the red circle. It picks one. Usually the left one. It never tried to draw one box around both. If you say, the leftmost red circle, ten out of ten. But, the red circle nearest the blue square, was only five out of ten.
+A: So position words work, and relationships are shaky.
+B: Then documents, which is what TypeSafe's own examples lead with. On our fake invoice, big blocks were fine. The logo, the signature, the address, the table. Thirty of thirty two. Single values, like the invoice number, or the total. Zero of twenty four.
+A: Zero.
+B: Zero, at our hit threshold. They are less than twenty pixels tall, which is right at that one percent grid again. The boxes land near the value. If you pad the box by five percent, the value is always inside. But so is the line next to it.
+A: So Box gets you to the right neighbourhood, and something else has to read the house number.
+B: That's it. Now cost, because this part is good news. TypeSafe has not published what an image costs in tokens, so we measured it. It is about two thousand five hundred tokens per megapixel. And each extra Box question on the same image is about fourteen tokens.
+A: Fourteen.
+B: The image is only counted once. And accuracy did not improve with bigger images. A five hundred and sixty pixel image did as well as a fifteen hundred pixel one, at less than a fifth of the tokens.
+A: The entire suite, all one hundred and fifty nine requests, cost two and a half cents.
+B: Two more things. First, it is not deterministic. We sent the identical request five times. Four of the five boxes barely moved. One jumped to a completely different place, on one of the runs.
+A: Was that a low confidence one?
+B: It was. Which brings us to confidence overall. At 0.85 and above, ninety eight percent of boxes were hits. Below 0.5, it was fifty seven percent. So high confidence, you can act on. Low confidence means, look again.
+A: And second, a strange one from the contract checks. If you send a Box question with no image at all, you do not get an error. You get a box. Confidence 0.01, but a box.
+B: So check your own inputs.
+A: So if someone is building on this tomorrow, what do they do?
+B: Pair every Box with a Noul. Keep the target at least a tenth of the image wide, or crop first. Pad before you crop. Send small images. Trust confidence at the top of the range. And use Box to find regions of a page, not single values.
+A: And remember what this is. One afternoon, one model version, synthetic images, and sometimes only three examples per condition. Enough to shape a prototype. Not enough to set a production threshold.
+B: The write up, the slides, and the code are all linked alongside this episode. A rerun takes about two minutes.
+A: And two and a half cents.
+B: Thanks for listening.

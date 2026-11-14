@@ -2,5 +2,6 @@
 .venv/
 __pycache__/
 results-mock/
+deck-build/
 *.pyc
 .DS_Store
