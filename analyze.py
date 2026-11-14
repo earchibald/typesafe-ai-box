@@ -117,10 +117,23 @@ def boxes(records: list[dict], want=lambda rec, qid, t: True):
             yield rec, qid, t, e, ans.get("confidence"), iou(e, t["gt"])
 
 
+def iou_1d(a0: float, a1: float, b0: float, b1: float) -> float:
+    inter = max(0.0, min(a1, b1) - max(a0, b0))
+    union = (a1 - a0) + (b1 - b0) - inter
+    return inter / union if union > 0 else 0.0
+
+
+def center_in(box: list[float], target: list[float]) -> bool:
+    """Is the centre of `target` inside `box`?"""
+    cx, cy = (target[0] + target[2]) / 2, (target[1] + target[3]) / 2
+    return box[0] <= cx <= box[2] and box[1] <= cy <= box[3]
+
+
 def acc_block(rows: list[tuple]) -> dict:
     ious = [r[5] for r in rows]
     return {
         "n": len(rows),
+        "target_center_in_box": rate(center_in(r[3], r[2]["gt"]) for r in rows),
         "mean_iou": mean(ious),
         "median_iou": median(ious),
         "hit_rate": rate(i >= HIT for i in ious),
@@ -133,9 +146,13 @@ def acc_block(rows: list[tuple]) -> dict:
 def analyze(data: dict[str, list[dict]]) -> dict:
     s: dict = {"hit_threshold_iou": HIT}
     pooled: list[tuple[float, float, str]] = []  # (confidence, IoU, experiment)
+    axes: list[tuple[float, float, float]] = []  # (IoU, horizontal 1-D IoU, vertical 1-D IoU)
 
     def pool(rows: list[tuple], exp: str) -> None:
         pooled.extend((r[4], r[5], exp) for r in rows if r[4] is not None)
+        for r in rows:
+            e, g = r[3], r[2]["gt"]
+            axes.append((r[5], iou_1d(e[0], e[2], g[0], g[2]), iou_1d(e[1], e[3], g[1], g[3])))
 
     all_ok = [r for recs in data.values() for r in recs if r.get("status") == 200]
     s["overall"] = {
@@ -380,8 +397,21 @@ def analyze(data: dict[str, list[dict]]) -> dict:
             by_mode[r[2]["mode"]].append(r)
         s["e7"] = {k: acc_block(v) for k, v in by_mode.items()}
 
+    if axes:
+        # A miss with the rows right and the columns wrong (or the reverse). Small targets are
+        # left out: on a 0.01 grid their 1-D overlap is dominated by rounding.
+        misses = [a for a in axes if a[0] < HIT]
+        s["axes"] = {
+            "n": len(axes),
+            "mean_horizontal_iou": mean(a[1] for a in axes),
+            "mean_vertical_iou": mean(a[2] for a in axes),
+            "misses": len(misses),
+            "misses_vertical_ok_horizontal_off": sum(a[2] >= 0.6 and a[1] < 0.4 for a in misses),
+            "misses_horizontal_ok_vertical_off": sum(a[1] >= 0.6 and a[2] < 0.4 for a in misses),
+        }
+
     if pooled:
-        bins = [(0.0, 0.5), (0.5, 0.7), (0.7, 0.85), (0.85, 0.95), (0.95, 1.0001)]
+        bins =[(0.0, 0.5), (0.5, 0.7), (0.7, 0.85), (0.85, 0.95), (0.95, 1.0001)]
         s["confidence"] = {
             "n": len(pooled),
             "spearman_confidence_vs_iou": spearman([p[0] for p in pooled], [p[1] for p in pooled]),
